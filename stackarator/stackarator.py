@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.interpolate as interpolate
 from astropy.io import fits
-from dist_ellipse import dist_ellipse
+from stackarator.dist_ellipse import dist_ellipse
 import astropy.units as u
 from tqdm import tqdm
     
