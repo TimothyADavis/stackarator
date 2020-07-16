@@ -7,7 +7,7 @@ A tool for stacking interferometric data of extended sources (such as nearby gal
 
 ### Install
 
-You can install Stackarator with `pip install kinms`. Alternatively you can download the code, navigate to the directory you unpack it too, and run `python setup.py install`.
+You can install Stackarator with `pip install stackarator`. Alternatively you can download the code, navigate to the directory you unpack it too, and run `python setup.py install`.
     
 It requires the following modules:
 
@@ -15,3 +15,21 @@ It requires the following modules:
 * matplotlib
 * scipy
 * tqdm
+
+### Documentation
+
+A simple iPython notebook tutorial on the basics of Stackarator is coming soon.
+
+### Commumication
+
+If you find any bugs, or wish to be kept up to date when new versions of this software are released, please raise an issue here on github, or email me at DavisT -at- cardiff.ac.uk.
+
+### License
+
+Stackarator is MIT-style licensed, as found in the LICENSE file.
+
+
+Many thanks,
+
+Dr Timothy A. Davis
+Cardiff, UK
