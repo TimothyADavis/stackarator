@@ -13,7 +13,7 @@ setup(name='stackarator',
        long_description=long_description,
        long_description_content_type="text/markdown",
        license='MIT',
-       packages=['stackarator'],
+       packages=['stackarator','stackarator.examples'],
        install_requires=[
            'numpy',
            'tqdm',

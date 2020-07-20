@@ -19,7 +19,7 @@ It requires the following modules:
 
 ### Documentation
 
-A simple iPython notebook tutorial on the basics of Stackarator is coming soon.
+A simple iPython notebook tutorial on the basics of Stackarator is included here: [Stackarator tutorial](https://github.com/TimothyADavis/stackarator/tree/master/stackarator/examples/Stackarator_Tutorial.ipynb)
 
 ### Commumication
 
