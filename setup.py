@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
  
 setup(name='stackarator',
-       version='0.0.1',
+       version='0.0.3',
        description='A tool for stacking interferometric data of extended sources (such as nearby galaxies) to extract weak emission lines.',
        url='https://github.com/TimothyADavis/stackarator',
        author='Timothy A. Davis',
@@ -13,7 +13,7 @@ setup(name='stackarator',
        long_description=long_description,
        long_description_content_type="text/markdown",
        license='MIT',
-       packages=['stackarator','stackarator.examples'],
+       packages=['stackarator'],
        install_requires=[
            'numpy',
            'tqdm',

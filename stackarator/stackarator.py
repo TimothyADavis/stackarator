@@ -21,6 +21,7 @@ class stackarator:
         self.xcoord,self.ycoord,self.vcoord = None, None, None
         self.dv=None
         self.cellsize=None
+        self.silent=False # rig for silent running if true
         
     def input_cube(self,cube,xcoord,ycoord,vcoord,rms=None):
             self.datacube=cube
@@ -40,14 +41,14 @@ class stackarator:
             quarterx=np.array(self.xcoord.size/4.).astype(np.int)
             quartery=np.array(self.ycoord.size/4.).astype(np.int)
             self.rms=np.nanstd(self.datacube[quarterx*1:3*quarterx,1*quartery:3*quartery,2:5])
-            print("Estimated RMS from channels 2-5:",self.rms)
+            if self.silent: print("Estimated RMS from channels 2-5:",self.rms)
   
     def read_fits_cube(self,cube,rms=None):
         
         ### read in cube ###
         hdulist=fits.open(cube)
         hdr=hdulist[0].header
-        self.datacube = hdulist[0].data.T
+        self.datacube = np.squeeze(hdulist[0].data.T) #squeeze to remove singular stokes axis if present
         self.region=np.ones(self.datacube.shape[0:2])
         self.rms=rms
         
@@ -138,7 +139,12 @@ class stackarator:
         self.region=np.zeros(self.datacube.shape[0:2])
         xc,=np.where(np.abs(self.xcoord-gal_centre[0]) == np.min(np.abs(self.xcoord-gal_centre[0])))
         yc,=np.where(np.abs(self.ycoord-gal_centre[1]) == np.min(np.abs(self.ycoord-gal_centre[1])))
-        distim=dist_ellipse(self.datacube.shape[0:2], xc[0], yc[0], 1/np.cos(np.deg2rad(inc)), pa=pa)*self.cellsize
+        
+        if self.xcoord.size <= self.ycoord.size: ## python is super annoying about changing around array dimensions
+            distim=dist_ellipse(self.datacube.shape[0:2], xc[0], yc[0], 1/np.cos(np.deg2rad(inc)), pa=pa)*self.cellsize
+        else:
+            distim=dist_ellipse(self.datacube.shape[0:2], yc[0], xc[0], 1/np.cos(np.deg2rad(inc)), pa=pa)*self.cellsize
+            
         self.region[(distim >= rad_inner)&(distim<rad_outer)] = 1
         
     def stack(self):
