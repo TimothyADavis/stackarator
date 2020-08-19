@@ -25,6 +25,7 @@ class stackarator:
         
     def input_cube(self,cube,xcoord,ycoord,vcoord,rms=None):
             self.datacube=cube
+            self.region=np.ones(self.datacube.shape[0:2])
             self.datacube[~np.isfinite(self.datacube)]=0.0
             self.xcoord,self.ycoord,self.vcoord = xcoord,ycoord,vcoord
             self.dv=np.median(np.diff(self.vcoord))
@@ -155,7 +156,7 @@ class stackarator:
         
         x,y=np.where((self.region == 1))     
 
-        for i in  tqdm(range(0,x.size)):
+        for i in tqdm(range(0,x.size),disable=self.silent):
             vcent=self.mom1_interpol_func(self.xcoord[x[i]],self.ycoord[y[i]])
             if vcent != self.badvel:    
                 spec+=np.interp(vout, self.vcoord-vcent, self.datacube[x[i],y[i],:],left=0,right=0)
