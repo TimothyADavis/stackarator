@@ -4,6 +4,10 @@ from astropy.io import fits
 from stackarator.dist_ellipse import dist_ellipse
 import astropy.units as u
 from tqdm import tqdm
+import warnings
+from spectral_cube import SpectralCube
+from spectral_cube.utils import SpectralCubeWarning
+warnings.filterwarnings(action='ignore', category=SpectralCubeWarning, append=True)
     
 class stackarator:
     
@@ -22,6 +26,7 @@ class stackarator:
         self.dv=None
         self.cellsize=None
         self.silent=False # rig for silent running if true
+        self.rmsimg=None
         
     def input_cube(self,cube,xcoord,ycoord,vcoord,rms=None):
             self.datacube=cube
@@ -41,31 +46,49 @@ class stackarator:
     def rms_estimate(self):
             quarterx=np.array(self.xcoord.size/4.).astype(np.int)
             quartery=np.array(self.ycoord.size/4.).astype(np.int)
-            self.rms=np.nanstd(self.datacube[quarterx*1:3*quarterx,1*quartery:3*quartery,2:5])
-            if self.silent: print("Estimated RMS from channels 2-5:",self.rms)
+            wnotzero,=np.where(np.nansum(np.nansum(self.datacube,axis=0),axis=0) > 0)
+            self.rms=np.nanstd(self.datacube[quarterx*1:3*quarterx,1*quartery:3*quartery,wnotzero[2]:wnotzero[5]])
+            if not self.silent: print("Estimated RMS from channels 2-5:",self.rms)
   
-    def read_fits_cube(self,cube,rms=None):
+    def read_fits_cube(self,cube,pbcube=None,rms=None):
         
         ### read in cube ###
-        hdulist=fits.open(cube)
-        hdr=hdulist[0].header
-        self.datacube = np.squeeze(hdulist[0].data.T) #squeeze to remove singular stokes axis if present
+        #hdulist=fits.open(cube)
+        #hdr=hdulist[0].header
+        #self.datacube = np.squeeze(hdulist[0].data.T) #squeeze to remove singular stokes axis if present
+        self.spectralcube=SpectralCube.read(cube).with_spectral_unit(u.km/u.s, velocity_convention='radio')#.to(u.Jy/u.beam) #, rest_value=self.restfreq)
+        self.bunit=self.spectralcube.unit.to_string()
+        hdr=self.spectralcube.header
+        self.datacube = np.squeeze(self.spectralcube.filled_data[:,:,:].T).value #squeeze to remove singular stokes axis if present
+        #cube[np.isfinite(cube) == False] = 0.0
+        
+        
+        
         self.region=np.ones(self.datacube.shape[0:2])
         self.rms=rms
         
         try:
-           self.bmaj=hdr['BMAJ']*3600.
-           self.bmin=hdr['BMIN']*3600.
-           self.bpa=hdr['BPA']*3600.
+            beamtab=self.spectralcube.beam
         except:
-           self.bmaj=np.median(hdulist[1].data['BMAJ'])
-           self.bmin=np.median(hdulist[1].data['BMIN'])
-           self.bpa=np.median(hdulist[1].data['BPA'])
+            beamtab=self.spectralcube.beams[np.floor(self.spectralcube.beams.size/2).astype(int)]
+        
+        self.bmaj= beamtab.major.to(u.arcsec).value
+        self.bmin= beamtab.minor.to(u.arcsec).value
+        self.bpa=beamtab.pa.to(u.degree).value
+        
+        # try:
+        #    self.bmaj=hdr['BMAJ']*3600.
+        #    self.bmin=hdr['BMIN']*3600.
+        #    self.bpa=hdr['BPA']*3600.
+        # except:
+        #    self.bmaj=np.median(hdulist[1].data['BMAJ'])
+        #    self.bmin=np.median(hdulist[1].data['BMIN'])
+        #    self.bpa=np.median(hdulist[1].data['BPA'])
         
         self.xcoord,self.ycoord,self.vcoord,self.cellsize,self.dv = self.get_header_coord_arrays(hdr,"cube")
         
         if self.dv < 0:
-            self.datacube = np.flip(hdulist[0].data.T,axis=2)
+            self.datacube = np.flip(self.datacube,axis=2)
             self.dv*=(-1)
             self.vcoord = np.flip(self.vcoord)
                     
@@ -75,7 +98,14 @@ class stackarator:
 
 
         self.datacube[~np.isfinite(self.datacube)]=0.0
-          
+        
+        if pbcube!=None:
+            pbhdulist=fits.open(pbcube)
+            self.rmsimg=self.rms/np.median(np.squeeze(pbhdulist[0].data.T),2)
+        else:
+            self.rmsimg=self.rms/np.ones(self.datacube.shape[0:2])
+        self.rmsimg[np.isfinite(self.rmsimg) ==0]=self.rms
+            
         
     def get_header_coord_arrays(self,hdr,cube_or_mom):
         try:
@@ -113,9 +143,9 @@ class stackarator:
 
         
         
-    def read_fits_mom1(self,mom1,vsys=0):
+    def read_fits_mom1(self,mom1,vsys=None):
         hdulist1=fits.open(mom1)
-        if vsys == 0:
+        if vsys == None:
             try:
                 vsys=hdulist1[0].header['SYSVEL']
             except:
@@ -130,9 +160,10 @@ class stackarator:
         
         
     def input_mom1(self,x1,y1,mom1,vsys=0):
+        
         self.vsys=vsys
         self.moment1 = mom1 + self.vsys
-        self.moment1[~np.isfinite(self.moment1)]=(-10000)
+        self.moment1[~np.isfinite(self.moment1)]=self.badvel
         self.mom1_interpol_func = interpolate.interp2d(x1, y1, self.moment1, fill_value=self.badvel)
         
         
@@ -151,7 +182,8 @@ class stackarator:
     def stack(self):
         spec=np.zeros(3*self.vcoord.size)
         num=np.zeros(3*self.vcoord.size)
-
+        rms=np.zeros(3*self.vcoord.size)+self.rms
+        
         vout=((np.arange(0,3*self.vcoord.size)-(1.5*self.vcoord.size))*self.dv) 
         
         x,y=np.where((self.region == 1))     
@@ -159,13 +191,20 @@ class stackarator:
         for i in tqdm(range(0,x.size),disable=self.silent):
             vcent=self.mom1_interpol_func(self.xcoord[x[i]],self.ycoord[y[i]])
             if vcent != self.badvel:    
-                spec+=np.interp(vout, self.vcoord-vcent, self.datacube[x[i],y[i],:],left=0,right=0)
-                num+=np.interp(vout, self.vcoord-vcent, np.ones(self.vcoord.size),left=0,right=0)
-
+                newspec=np.interp(vout, self.vcoord-vcent, self.datacube[x[i],y[i],:],left=0,right=0)
+                spec += newspec
+                nadded=np.interp(vout, self.vcoord-vcent, np.ones(self.vcoord.size),left=0,right=0)
+                num+=nadded
+                #breakpoint()
+                rms[nadded > 0]=np.sqrt(rms[nadded > 0]**2 + self.rmsimg[x[i],y[i]]**2)
+                
+                
         outspec=spec[num >= 1]
         outn=num[num >= 1]
-        outspec=outspec
-        outrms=self.rms*np.sqrt(outn)
+        outrms=rms[num >= 1] #self.rms*np.sqrt(outn)
+        #import ipdb
+        #ipdb.set_trace()
+        
         return vout[num >= 1],outspec,outrms,outn
         
     
