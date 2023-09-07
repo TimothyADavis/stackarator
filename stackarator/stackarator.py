@@ -28,6 +28,7 @@ class stackarator:
         self.cellsize = None
         self.silent = False  # rig for silent running if true
         self.rmsimg = None
+        self.distimg = None
 
     def input_cube(self, cube, xcoord, ycoord, vcoord, rms=None):
         self.datacube = cube
@@ -251,6 +252,9 @@ class stackarator:
                 )
                 * self.cellsize
             )
+            
+        # save dist ellipse object as stack attribute
+        self.distimg = distim
 
         self.region[(distim >= rad_inner) & (distim < rad_outer)] = 1
 
