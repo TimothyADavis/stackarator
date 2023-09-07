@@ -1,15 +1,15 @@
+import warnings
+
+import astropy.units as u
 import numpy as np
 import scipy.interpolate as interpolate
 from astropy.io import fits
-from stackarator.dist_ellipse import dist_ellipse
-import astropy.units as u
-from tqdm import tqdm
-import warnings
 from spectral_cube import SpectralCube
-from spectral_cube.utils import SpectralCubeWarning
+from spectral_cube.utils import SpectralCubeWarning, NoBeamError
+from stackarator.dist_ellipse import dist_ellipse
+from tqdm import tqdm
 
 warnings.filterwarnings(action="ignore", category=SpectralCubeWarning, append=True)
-
 
 class stackarator:
     def __init__(self):
@@ -66,11 +66,10 @@ class stackarator:
         self.spectralcube = SpectralCube.read(cube).with_spectral_unit(
             u.km / u.s, velocity_convention=velocity_convention
         )  # .to(u.Jy/u.beam) #, rest_value=self.restfreq)
-        
-        self.bunit = self.spectralcube.unit.to_string()
-        
+
+
         hdr = self.spectralcube.header
-        
+
         self.datacube = np.squeeze(
             self.spectralcube.filled_data[:, :, :].T
         ).value  # squeeze to remove singular stokes axis if present
@@ -78,17 +77,32 @@ class stackarator:
 
         self.region = np.ones(self.datacube.shape[0:2])
         self.rms = rms
-
+        
+        # only save beam info to attr if it exists in cube file
         try:
-            beamtab = self.spectralcube.beam
-        except:
-            beamtab = self.spectralcube.beams[
-                np.floor(self.spectralcube.beams.size / 2).astype(int)
-            ]
+            hasbeam = hasattr(self.spectralcube, "beam")
+        except NoBeamError as e:
+            print(e)
+            hasbeam = False
+        
+        if not hasbeam: # allow for varying resolution (multi-beam) cubes
+            hasbeam = hasattr(self.spectralcube, "beams")
+        
+        if hasbeam:
+        
+            self.bunit = self.spectralcube.unit.to_string()
+        
 
-        self.bmaj = beamtab.major.to(u.arcsec).value
-        self.bmin = beamtab.minor.to(u.arcsec).value
-        self.bpa = beamtab.pa.to(u.degree).value
+            try:
+                beamtab = self.spectralcube.beam
+            except:
+                beamtab = self.spectralcube.beams[
+                    np.floor(self.spectralcube.beams.size / 2).astype(int)
+                ]
+
+            self.bmaj = beamtab.major.to(u.arcsec).value
+            self.bmin = beamtab.minor.to(u.arcsec).value
+            self.bpa = beamtab.pa.to(u.degree).value
 
         # try:
         #    self.bmaj=hdr['BMAJ']*3600.
@@ -108,9 +122,9 @@ class stackarator:
         ) = self.get_header_coord_arrays(
             hdr, "cube", velocity_convention=velocity_convention
         )
-        
+
         self.vcoord = self.spectralcube.spectral_axis.value
-        
+
         if self.dv < 0:
             self.datacube = np.flip(self.datacube, axis=2)
             self.dv *= -1
@@ -145,14 +159,13 @@ class stackarator:
                 cd3 = hdr["CDELT3"]
             except:
                 cd3 = hdr["CD3_3"]
-                
-            
+
             if velocity_convention == "optical":
                 ctype = "VOPT"
             else:
                 ctype = "VRAD"
 
-            if ctype in hdr["CTYPE3"]: # allow more flexibility with CTYPE3
+            if ctype in hdr["CTYPE3"]:  # allow more flexibility with CTYPE3
                 v1 = ((np.arange(0, hdr["NAXIS3"]) - (hdr["CRPIX3"] - 1)) * cd3) + hdr[
                     "CRVAL3"
                 ]
