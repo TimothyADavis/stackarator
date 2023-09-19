@@ -30,6 +30,7 @@ class stackarator:
         self.silent = False  # rig for silent running if true
         self.rmsimg=None
         self.distimg = None
+        
     def input_cube(self, cube, xcoord, ycoord, vcoord, rms=None):
         self.datacube = cube
         self.region = np.ones(self.datacube.shape[0:2])
@@ -228,7 +229,9 @@ class stackarator:
             distim=self.dist_flat(self.datacube.shape[0:2],pa+90,[xc[0],yc[0]])*self.cellsize
         
         self.region[(distim >= rad_inner)&(distim<rad_outer)] = 1
-    
+        # save dist ellipse object as stack attribute
+        self.distimg = distim
+        
     def dist_flat(self,size,pa,cent):
         outarr = np.zeros((size[0],size[1]))
         m = np.tan(np.deg2rad(90+pa))
@@ -237,11 +240,9 @@ class stackarator:
            for j in range(0,size[1]):
               outarr[i,j] = abs(((i-cent[0])-((j-cent[1])/m))*np.sin((((90+pa)*np.pi)/180)))
            
-            
-        # save dist ellipse object as stack attribute
-        self.distimg = distim
+        return outarr    
 
-        self.region[(distim >= rad_inner) & (distim < rad_outer)] = 1
+
     def stack(self):
         spec = np.zeros(3 * self.vcoord.size)
         num = np.zeros(3 * self.vcoord.size)
@@ -270,7 +271,6 @@ class stackarator:
                     right=0,
                 )
                 num += nadded
-                # breakpoint()
                 rms[nadded > 0] = np.sqrt(
                     rms[nadded > 0] ** 2 + self.rmsimg[x[i], y[i]] ** 2
                 )
@@ -278,7 +278,4 @@ class stackarator:
         outspec = spec[num >= 1]
         outn = num[num >= 1]
         outrms = rms[num >= 1]  # self.rms*np.sqrt(outn)
-        # import ipdb
-        # ipdb.set_trace()
-
         return vout[num >= 1], outspec, outrms, outn
