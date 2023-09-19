@@ -16,6 +16,7 @@ class stackarator:
         self.vsys = None
         self.moment1 = None
         self.mom1_interpol_func = None
+        self.switch_to_flat=80. ## switch to flat w/radius after this many degrees
         self.rms = None
         self.badvel = -10000
         self.datacube = None
@@ -27,9 +28,8 @@ class stackarator:
         self.dv = None
         self.cellsize = None
         self.silent = False  # rig for silent running if true
-        self.rmsimg = None
+        self.rmsimg=None
         self.distimg = None
-
     def input_cube(self, cube, xcoord, ycoord, vcoord, rms=None):
         self.datacube = cube
         self.region = np.ones(self.datacube.shape[0:2])
@@ -39,9 +39,9 @@ class stackarator:
         self.cellsize = np.abs(np.median(np.diff(self.xcoord))) * 3600.0
         self.rms = rms
         if self.dv < 0:
-            self.datacube = np.flip(hdulist[0].data.T, axis=2)
             self.dv *= -1
             self.vcoord = np.flip(self.vcoord)
+            self.datacube = np.flip(hdulist[0].data.T, axis=2)
         if self.rms == None:
             self.rms_estimate()
 
@@ -217,47 +217,31 @@ class stackarator:
             x1, y1, self.moment1, fill_value=self.badvel
         )
 
-    def define_region_ellipse(self, gal_centre, inc, pa, rad_inner=0, rad_outer=np.inf):
-        self.region = np.zeros(self.datacube.shape[0:2])
-        (xc,) = np.where(
-            np.abs(self.xcoord - gal_centre[0])
-            == np.min(np.abs(self.xcoord - gal_centre[0]))
-        )
-        (yc,) = np.where(
-            np.abs(self.ycoord - gal_centre[1])
-            == np.min(np.abs(self.ycoord - gal_centre[1]))
-        )
-
-        if (
-            self.xcoord.size <= self.ycoord.size
-        ):  ## python is super annoying about changing around array dimensions
-            distim = (
-                dist_ellipse(
-                    self.datacube.shape[0:2],
-                    xc[0],
-                    yc[0],
-                    1 / np.cos(np.deg2rad(inc)),
-                    pa=pa,
-                )
-                * self.cellsize
-            )
+    def define_region_ellipse(self,gal_centre,inc,pa,rad_inner=0,rad_outer=np.inf):
+        self.region=np.zeros(self.datacube.shape[0:2])
+        xc,=np.where(np.abs(self.xcoord-gal_centre[0]) == np.min(np.abs(self.xcoord-gal_centre[0])))
+        yc,=np.where(np.abs(self.ycoord-gal_centre[1]) == np.min(np.abs(self.ycoord-gal_centre[1])))
+        
+        if inc<self.switch_to_flat:
+            distim=dist_ellipse(self.datacube.shape[0:2], yc[0], xc[0], 1/np.cos(np.deg2rad(inc)), pa=(90-pa)+90)*self.cellsize
         else:
-            distim = (
-                dist_ellipse(
-                    self.datacube.shape[0:2],
-                    yc[0],
-                    xc[0],
-                    1 / np.cos(np.deg2rad(inc)),
-                    pa=pa,
-                )
-                * self.cellsize
-            )
+            distim=self.dist_flat(self.datacube.shape[0:2],pa+90,[xc[0],yc[0]])*self.cellsize
+        
+        self.region[(distim >= rad_inner)&(distim<rad_outer)] = 1
+    
+    def dist_flat(self,size,pa,cent):
+        outarr = np.zeros((size[0],size[1]))
+        m = np.tan(np.deg2rad(90+pa))
+
+        for i in range(0,size[0]):
+           for j in range(0,size[1]):
+              outarr[i,j] = abs(((i-cent[0])-((j-cent[1])/m))*np.sin((((90+pa)*np.pi)/180)))
+           
             
         # save dist ellipse object as stack attribute
         self.distimg = distim
 
         self.region[(distim >= rad_inner) & (distim < rad_outer)] = 1
-
     def stack(self):
         spec = np.zeros(3 * self.vcoord.size)
         num = np.zeros(3 * self.vcoord.size)
